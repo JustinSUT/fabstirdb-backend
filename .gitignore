@@ -1,0 +1,30 @@
+# Dependency directories
+node_modules/
+
+# Package lock files
+package-lock.json
+yarn.lock
+yarn-error.log
+
+# Log files
+*.log
+
+# Coverage reports
+coverage/*
+
+# Optional npm cache directory
+.npm
+
+# Environment variables
+.env
+
+# Testing tools (modify if needed)
+.nyc_output/
+
+# Editor temporary/cache files
+# Adjust these based on your editor
+.vscode/
+.idea/
+
+keys/
+orbitdb/ 
