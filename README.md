@@ -181,3 +181,12 @@ Express route handler for deleting data at a specified path.
 - **Response**: `res` (Object)
 - **Returns**: void
 - **Throws**: Error if there is an error while deleting the data.
+
+## Installation and Setup
+
+This application uses JSON Web Tokens (JWT) for authentication. To enable this, you need to set a secret key that's used to sign and verify the tokens. You set this key by setting the `JWT_SECRET` environment variable.
+
+```
+yarn install
+node server.js
+```
