@@ -4,6 +4,9 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { initUserDB } from "./initUserDB.js";
 import { initAclDB } from "./initAclDB.js";
+import crypto from "crypto";
+import Gun from "gun";
+const SEA = Gun.SEA;
 
 import { config } from "dotenv";
 config();
@@ -343,7 +346,8 @@ async function startServer() {
      * @throws {Error} If there is an error while fetching the data.
      */
     app.get("/:path*", async (req, res) => {
-      const key = req.params.path + (req.params[0] ? req.params[0] : ""); // Combine path and splat parameter
+      const path = decodeURIComponent(req.params.path);
+      const key = path + (req.params[0] ? req.params[0] : ""); // Combine path and splat parameter
       try {
         const items = await userDb.get(key);
         console.log("Fetched data:", items);
@@ -375,7 +379,8 @@ async function startServer() {
      * @security JWT
      */
     app.post("/:path*", authenticate, checkWriteAccess, async (req, res) => {
-      const key = req.params.path + (req.params[0] ? req.params[0] : "");
+      const path = decodeURIComponent(req.params.path);
+      const key = path + (req.params[0] ? req.params[0] : "");
       const data = req.body;
 
       // Check if path includes a hash
@@ -384,10 +389,17 @@ async function startServer() {
         const basePath = segments[0];
         const providedHash = segments[1];
 
-        const calculatedHash = crypto
-          .createHash("sha256")
-          .update(JSON.stringify(data))
-          .digest("hex");
+        // const calculatedHash = crypto
+        //   .createHash("sha256")
+        //   .update(JSON.stringify(data))
+        //   .digest("hex");
+
+        const calculatedHash = await SEA.work(
+          JSON.stringify(data),
+          null,
+          null,
+          { name: "SHA-256" }
+        );
 
         // Verify that the provided hash matches the calculated hash
         if (providedHash !== calculatedHash) {
@@ -418,7 +430,7 @@ async function startServer() {
       } else {
         // Regular data saving without hash
         try {
-          const result = await userDb.put({ _id: key, ...req.body });
+          const result = await userDb.put({ _id: key, data });
           res.json(result);
         } catch (error) {
           console.error("Failed to save data:", error);
