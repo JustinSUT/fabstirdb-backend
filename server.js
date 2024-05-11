@@ -359,29 +359,77 @@ async function startServer() {
     });
 
     /**
-     * Express route handler for saving data to a specified path.
-     * @async
-     * @param {Object} req - The Express request object.
-     * @param {Object} req.params - The parameters of the request.
-     * @param {string} req.params.path - The path where the data will be saved.
-     * @param {Object} req.body - The body of the request, containing the data to be saved.
-     * @param {Object} res - The Express response object.
-     * @returns {void}
-     * @throws {Error} If there is an error while saving the data.
+     * Endpoint to save data at a specified path. If the path includes a hash,
+     * the data is saved under the hash after verifying that the provided hash
+     * matches the calculated hash of the data. If the path does not include a hash,
+     * the data is saved directly under the path.
+     *
+     * @route POST /:path*
+     * @group Data - Operations related to data
+     * @param {string} path.path.required - The base path where the data should be saved
+     * @param {object} request.body.required - The data to save
+     * @returns {object} 201 - An object containing a message and the full path where the data was saved
+     * @returns {Error}  400 - Hash mismatch: The provided hash does not match the calculated hash of the data
+     * @returns {Error}  409 - Data under this hash already exists
+     * @returns {Error}  500 - Server error while saving hashed data or Server Error
+     * @security JWT
      */
     app.post("/:path*", authenticate, checkWriteAccess, async (req, res) => {
       const key = req.params.path + (req.params[0] ? req.params[0] : "");
-      try {
-        const result = await userDb.put({ _id: key, ...req.body });
-        res.json(result);
-      } catch (error) {
-        console.error("Failed to save data:", error);
-        res.status(500).send("Server Error");
+      const data = req.body;
+
+      // Check if path includes a hash
+      if (key.includes("/#/")) {
+        const segments = key.split("/#/");
+        const basePath = segments[0];
+        const providedHash = segments[1];
+
+        const calculatedHash = crypto
+          .createHash("sha256")
+          .update(JSON.stringify(data))
+          .digest("hex");
+
+        // Verify that the provided hash matches the calculated hash
+        if (providedHash !== calculatedHash) {
+          return res
+            .status(400)
+            .send(
+              "Hash mismatch: The provided hash does not match the calculated hash of the data."
+            );
+        }
+
+        const fullPath = `${basePath}/#/${providedHash}`;
+        try {
+          // Check if the data under this hash already exists to prevent duplicate entries under the same hash
+          const existingData = await userDb.get(fullPath);
+          if (existingData && existingData.length > 0) {
+            return res.status(409).send("Data under this hash already exists.");
+          }
+
+          await userDb.put({ _id: fullPath, data });
+          res.status(201).json({
+            message: "Data saved successfully under hash",
+            path: fullPath,
+          });
+        } catch (error) {
+          console.error("Error saving hashed data:", error);
+          res.status(500).send("Server error while saving hashed data");
+        }
+      } else {
+        // Regular data saving without hash
+        try {
+          const result = await userDb.put({ _id: key, ...req.body });
+          res.json(result);
+        } catch (error) {
+          console.error("Failed to save data:", error);
+          res.status(500).send("Server Error");
+        }
       }
     });
 
     /**
      * Express route handler for deleting data at a specified path.
+     * Ensures that data at paths containing hashes (immutable data) cannot be deleted.
      * @async
      * @param {Object} req - The Express request object.
      * @param {Object} req.params - The parameters of the request.
@@ -391,7 +439,15 @@ async function startServer() {
      * @throws {Error} If there is an error while deleting the data.
      */
     app.delete("/:path*", authenticate, async (req, res) => {
-      const key = req.params.path + (req.params[0] ? req.params[0] : ""); // Combine path and splat parameter
+      const key = req.params.path + (req.params[0] ? "/" + req.params[0] : ""); // Combine path and splat parameter
+
+      // Check if the path includes a hash segment, indicating immutable content
+      if (key.includes("/#/")) {
+        return res
+          .status(403)
+          .send("Deletion of immutable hashed data is not allowed.");
+      }
+
       try {
         await userDb.del(key);
         res.json({ message: "Data deleted successfully" });
