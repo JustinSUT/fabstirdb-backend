@@ -55,6 +55,9 @@ async function startServer() {
 
     /**
      * Middleware function for checking write access of a user.
+     * If the allowedPublicKeys array for a path includes the user's public key or '*',
+     * the user is granted write access. The '*' key represents access for any user.
+     *
      * @async
      * @param {Object} req - The Express request object.
      * @param {Object} res - The Express response object.
@@ -77,7 +80,8 @@ async function startServer() {
           if (
             accessRights &&
             (accessRights.owner === userPublicKey ||
-              accessRights.allowedPublicKeys.includes(userPublicKey))
+              accessRights.allowedPublicKeys.includes(userPublicKey) ||
+              accessRights.allowedPublicKeys.includes("*")) // Check if '*' is in the allowedPublicKeys
           ) {
             next();
             return;
@@ -99,11 +103,13 @@ async function startServer() {
 
     /**
      * Express route handler for adding write access to a user.
+     * If the publicKey is '*', write access is granted to all users.
+     *
      * @async
      * @param {Object} req - The Express request object.
      * @param {Object} req.body - The body of the request.
      * @param {string} req.body.path - The path to which write access is being added.
-     * @param {string} req.body.publicKey - The public key of the user to whom write access is being added.
+     * @param {string} req.body.publicKey - The public key of the user to whom write access is being added. If this is '*', write access is granted to all users.
      * @param {Object} res - The Express response object.
      * @returns {void}
      * @throws {Error} If there is an error while adding write access.
@@ -124,6 +130,13 @@ async function startServer() {
             owner: req.user.pub, // The current user becomes the owner if it's a new entry
             allowedPublicKeys: [],
           };
+        }
+
+        // If publicKey is '*', allow any user to write to the path
+        if (publicKey === "*") {
+          accessRights.allowedPublicKeys = ["*"];
+          await aclStore.put(accessRights);
+          return res.send({ message: "Write access granted to all users." });
         }
 
         // Add the publicKey if it's not already included in the allowedPublicKeys
