@@ -55,8 +55,10 @@ async function startServer() {
 
     /**
      * Middleware function for checking write access of a user.
+     * The check is only performed on paths that start with 'users/'.
      * If the allowedPublicKeys array for a path includes the user's public key or '*',
      * the user is granted write access. The '*' key represents access for any user.
+     * If the path does not start with 'users/', the request is allowed to proceed without checking the user's public key.
      *
      * @async
      * @param {Object} req - The Express request object.
@@ -67,6 +69,13 @@ async function startServer() {
      */
     async function checkWriteAccess(req, res, next) {
       let path = req.params.path + (req.params[0] ? req.params[0] : "");
+
+      // If the path does not start with 'users/', allow the request to proceed
+      if (!path.startsWith("users/")) {
+        next();
+        return;
+      }
+
       const userPublicKey = req.user.pub;
 
       try {
@@ -325,7 +334,7 @@ async function startServer() {
      * @returns {void}
      * @throws {Error} If there is an error while retrieving the ACL entry.
      */
-    app.get("/acl/:alias", authenticate, async (req, res) => {
+    app.get("/acl/:alias", async (req, res) => {
       const { alias } = req.params;
       try {
         const userCredentialsEntries = await userDb.get(alias);
