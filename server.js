@@ -41,7 +41,9 @@ async function startServer() {
     function authenticate(req, res, next) {
       const token = req.headers.authorization?.split(" ")[1]; // Assuming 'Bearer TOKEN_STRING'
       if (!token) {
-        return res.status(401).send("Access denied. No token provided.");
+        return res
+          .status(401)
+          .json({ err: "Access denied. No token provided." });
       }
 
       try {
@@ -49,7 +51,7 @@ async function startServer() {
         req.user = decoded; // Attaching user info to request object
         next(); // Pass control to the next middleware function
       } catch (ex) {
-        res.status(400).send("Invalid token.");
+        res.status(400).json({ err: "Invalid token." });
       }
     }
 
@@ -104,10 +106,10 @@ async function startServer() {
             break; // Exit if the path cannot be trimmed further, indicating root or isolated segment.
           }
         }
-        res.status(403).send("Access denied.");
+        res.status(403).json({ err: "Access denied." });
       } catch (error) {
         console.error("Access check failed:", error);
-        res.status(500).send("Server error during access check");
+        res.status(500).json({ err: "Server error during access check" });
       }
     }
 
@@ -159,7 +161,7 @@ async function startServer() {
         }
       } catch (error) {
         console.error("Error adding write access:", error);
-        res.status(500).send("Server error while adding write access");
+        res.status(500).json({ err: "Server error while adding write access" });
       }
     });
 
@@ -194,15 +196,17 @@ async function startServer() {
 
           // Update the access rights in the store
           await aclStore.put(accessRights);
-          res.send({ message: "Write access removed successfully." });
+          res.json({ message: "Write access removed successfully." });
         } else {
-          res.send({
-            message: "Public key does not have access or path does not exist.",
+          res.status(404).json({
+            err: "Public key does not have access or path does not exist.",
           });
         }
       } catch (error) {
         console.error("Error removing write access:", error);
-        res.status(500).send("Server error while removing write access");
+        res
+          .status(500)
+          .json({ err: "Server error while removing write access" });
       }
     });
 
@@ -218,7 +222,7 @@ async function startServer() {
     app.post("/request-token", (req, res) => {
       const { alias } = req.body;
       if (!alias) {
-        return res.status(400).send("Alias is required");
+        return res.status(400).json({ err: "Alias is required" });
       }
       const token = jwt.sign({ alias, tempUser: true }, JWT_SECRET, {
         expiresIn: "5m",
@@ -226,6 +230,17 @@ async function startServer() {
       res.json({ token });
     });
 
+    /**
+     * Endpoint for user registration. It authenticates the temporary token, registers the user,
+     * creates a JWT token, sets up initial access control for the user, and sends a success response.
+     * If an error occurs during this process, it sends a JSON error response.
+     *
+     * @async
+     * @param {Object} req - The Express request object. The body should contain 'alias', 'publicKey', and 'hashedPassword'.
+     * @param {Object} res - The Express response object.
+     * @returns {void}
+     * @throws {Error} If there's an error during the registration process.
+     */
     app.post("/register", authenticateTempToken, async (req, res) => {
       const { alias, publicKey, hashedPassword } = req.body;
 
@@ -259,7 +274,7 @@ async function startServer() {
         res.json({ message: "User registered successfully", token });
       } catch (error) {
         console.error("Registration error:", error);
-        res.status(500).send("Server error during registration");
+        res.status(500).json({ err: "Server error during registration" });
       }
     });
 
@@ -274,7 +289,9 @@ async function startServer() {
     function authenticateTempToken(req, res, next) {
       const token = req.headers.authorization?.split(" ")[1];
       if (!token) {
-        return res.status(401).send("Access denied. No token provided.");
+        return res
+          .status(401)
+          .json({ err: "Access denied. No token provided." });
       }
 
       try {
@@ -284,7 +301,7 @@ async function startServer() {
         req.user = decoded; // User information from token is now attached to the request
         next();
       } catch (error) {
-        res.status(400).send("Invalid or expired token.");
+        res.status(400).json({ err: "Invalid or expired token." });
       }
     }
 
@@ -314,14 +331,14 @@ async function startServer() {
             );
             res.json({ message: "Authentication successful", token });
           } else {
-            res.status(401).send("Authentication failed");
+            res.status(401).json({ err: "Authentication failed" });
           }
         } else {
-          res.status(404).send("User not found");
+          res.status(404).json({ err: "User not found" });
         }
       } catch (error) {
         console.error("Authentication error:", error);
-        res.status(500).send("Server error");
+        res.status(500).json({ err: "Server error" });
       }
     });
 
@@ -336,7 +353,9 @@ async function startServer() {
      * @throws {Error} If there is an error while retrieving the ACL entry.
      */
     app.get("/acl/:alias", async (req, res) => {
-      const { alias } = req.params;
+      let { alias } = req.params;
+      alias = decodeURIComponent(alias);
+
       try {
         const userCredentialsEntries = await userDb.get(alias);
 
@@ -347,14 +366,14 @@ async function startServer() {
         if (userCredentials) {
           res.json({ exists: true });
         } else {
-          res.status(404).send({
+          res.status(404).json({
             exists: false,
-            message: "No user credentials found for the user.",
+            err: "No user credentials found for the user.",
           });
         }
       } catch (error) {
         console.error("Failed to retrieve ACL entry:", error);
-        res.status(500).send("Server error");
+        res.status(500).json({ err: "Server error" });
       }
     });
 
@@ -375,14 +394,9 @@ async function startServer() {
         const items = await userDb.get(key);
         console.log("Fetched data:", items);
         res.json(items);
-        // if (items && items.length > 0) {
-        //   res.json(items);
-        // } else {
-        //   res.status(404).send("Data not found");
-        // }
       } catch (error) {
         console.error("Failed to fetch data:", error);
-        res.status(500).send("Server Error");
+        res.status(500).json({ err: "Server Error" });
       }
     });
 
@@ -418,11 +432,6 @@ async function startServer() {
         const basePath = segments[0];
         const providedHash = segments[1];
 
-        // const calculatedHash = crypto
-        //   .createHash("sha256")
-        //   .update(JSON.stringify(data))
-        //   .digest("hex");
-
         const calculatedHash = await SEA.work(
           JSON.stringify(data),
           null,
@@ -432,11 +441,9 @@ async function startServer() {
 
         // Verify that the provided hash matches the calculated hash
         if (providedHash !== calculatedHash) {
-          return res
-            .status(400)
-            .send(
-              "Hash mismatch: The provided hash does not match the calculated hash of the data."
-            );
+          return res.status(400).json({
+            err: "Hash mismatch: The provided hash does not match the calculated hash of the data.",
+          });
         }
 
         const fullPath = `${basePath}/#/${providedHash}`;
@@ -444,7 +451,9 @@ async function startServer() {
           // Check if the data under this hash already exists to prevent duplicate entries under the same hash
           const existingData = await userDb.get(fullPath);
           if (existingData && existingData.length > 0) {
-            return res.status(409).send("Data under this hash already exists.");
+            return res
+              .status(409)
+              .json({ err: "Data under this hash already exists." });
           }
 
           await userDb.put({ _id: fullPath, data });
@@ -454,7 +463,9 @@ async function startServer() {
           });
         } catch (error) {
           console.error("Error saving hashed data:", error);
-          res.status(500).send("Server error while saving hashed data");
+          res
+            .status(500)
+            .json({ err: "Server error while saving hashed data" });
         }
       } else {
         // Regular data saving without hash
@@ -463,7 +474,7 @@ async function startServer() {
           res.json(result);
         } catch (error) {
           console.error("Failed to save data:", error);
-          res.status(500).send("Server Error");
+          res.status(500).json({ err: "Server Error" });
         }
       }
     });
@@ -487,7 +498,7 @@ async function startServer() {
       if (key.includes("/#/")) {
         return res
           .status(403)
-          .send("Deletion of immutable hashed data is not allowed.");
+          .json({ err: "Deletion of immutable hashed data is not allowed." });
       }
 
       try {
@@ -495,7 +506,7 @@ async function startServer() {
         res.json({ message: "Data deleted successfully" });
       } catch (error) {
         console.error("Failed to delete data:", error);
-        res.status(500).send("Server Error");
+        res.status(500).json({ err: "Server Error" });
       }
     });
 
