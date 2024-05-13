@@ -68,7 +68,8 @@ async function startServer() {
      * @throws {Error} If the access check fails.
      */
     async function checkWriteAccess(req, res, next) {
-      let path = req.params.path + (req.params[0] ? req.params[0] : "");
+      let path = decodeURIComponent(req.params.path);
+      path = path + (req.params[0] ? req.params[0] : "");
 
       // If the path does not start with 'users/', allow the request to proceed
       if (!path.startsWith("users/")) {
@@ -373,11 +374,12 @@ async function startServer() {
       try {
         const items = await userDb.get(key);
         console.log("Fetched data:", items);
-        if (items && items.length > 0) {
-          res.json(items);
-        } else {
-          res.status(404).send("Data not found");
-        }
+        res.json(items);
+        // if (items && items.length > 0) {
+        //   res.json(items);
+        // } else {
+        //   res.status(404).send("Data not found");
+        // }
       } catch (error) {
         console.error("Failed to fetch data:", error);
         res.status(500).send("Server Error");
@@ -403,7 +405,12 @@ async function startServer() {
     app.post("/:path*", authenticate, checkWriteAccess, async (req, res) => {
       const path = decodeURIComponent(req.params.path);
       const key = path + (req.params[0] ? req.params[0] : "");
-      const data = req.body;
+      let data = req.body;
+
+      // If data is an object with a value property, extract the value
+      if (typeof data === "object" && data !== null && "value" in data) {
+        data = data.value;
+      }
 
       // Check if path includes a hash
       if (key.includes("/#/")) {
@@ -473,7 +480,8 @@ async function startServer() {
      * @throws {Error} If there is an error while deleting the data.
      */
     app.delete("/:path*", authenticate, async (req, res) => {
-      const key = req.params.path + (req.params[0] ? "/" + req.params[0] : ""); // Combine path and splat parameter
+      const path = decodeURIComponent(req.params.path);
+      const key = path + (req.params[0] ? "/" + req.params[0] : ""); // Combine path and splat parameter
 
       // Check if the path includes a hash segment, indicating immutable content
       if (key.includes("/#/")) {
