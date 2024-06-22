@@ -388,8 +388,8 @@ async function startServer() {
      * @throws {Error} If there is an error while fetching the data.
      */
     app.get("/:path*", async (req, res) => {
-      const path = decodeURIComponent(req.params.path);
-      const key = path + (req.params[0] ? req.params[0] : ""); // Combine path and splat parameter
+      const path = req.params.path;
+      const key = path + (req.params[0] ? req.params[0] : "") + "/"; // Combine path and splat parameter
       try {
         const items = await userDb.get(key);
         console.log("Fetched data:", items);
@@ -417,8 +417,8 @@ async function startServer() {
      * @security JWT
      */
     app.post("/:path*", authenticate, checkWriteAccess, async (req, res) => {
-      const path = decodeURIComponent(req.params.path);
-      const key = path + (req.params[0] ? req.params[0] : "");
+      const path = req.params.path;
+      const key = path + (req.params[0] ? req.params[0] : "") + "/";
       let data = req.body;
 
       // If data is an object with a value property, extract the value
@@ -427,10 +427,13 @@ async function startServer() {
       }
 
       // Check if path includes a hash
-      if (key.includes("/#/")) {
-        const segments = key.split("/#/");
+      if (key.includes("%23")) {
+        const segments = key.split(/%23.*?\//); // Split on the first occurrence of '%23/' or '%23anything/'
         const basePath = segments[0];
-        const providedHash = segments[1];
+        const hashAndBeyond = segments[1];
+
+        const hashSegments = hashAndBeyond.split(/\/(.+)/); // Split on the first '/'
+        const providedHash = hashSegments[0];
 
         const calculatedHash = await SEA.work(
           JSON.stringify(data),
@@ -446,7 +449,9 @@ async function startServer() {
           });
         }
 
-        const fullPath = `${basePath}/#/${providedHash}`;
+        const fullPath = `${basePath}/${providedHash}/${
+          hashSegments[1] || ""
+        }/`;
         try {
           // Check if the data under this hash already exists to prevent duplicate entries under the same hash
           const existingData = await userDb.get(fullPath);
