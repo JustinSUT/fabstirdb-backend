@@ -70,8 +70,7 @@ async function startServer() {
      * @throws {Error} If the access check fails.
      */
     async function checkWriteAccess(req, res, next) {
-      let path = decodeURIComponent(req.params.path);
-      path = path + (req.params[0] ? req.params[0] : "");
+      let path = req.params.path + (req.params[0] ? req.params[0] : "") + "/";
 
       // If the path does not start with 'users/', allow the request to proceed
       if (!path.startsWith("users/")) {
@@ -354,7 +353,6 @@ async function startServer() {
      */
     app.get("/acl/:alias", async (req, res) => {
       let { alias } = req.params;
-      alias = decodeURIComponent(alias);
 
       try {
         const userCredentialsEntries = await userDb.get(alias);
@@ -388,10 +386,9 @@ async function startServer() {
      * @throws {Error} If there is an error while fetching the data.
      */
     app.get("/:path*", async (req, res) => {
-      const path = req.params.path;
-      const key = path + (req.params[0] ? req.params[0] : "") + "/"; // Combine path and splat parameter
+      const path = req.params.path + (req.params[0] ? req.params[0] : "") + "/"; // Combine path and splat parameter
       try {
-        const items = await userDb.get(key);
+        const items = await userDb.get(path);
         console.log("Fetched data:", items);
         res.json(items);
       } catch (error) {
@@ -417,8 +414,7 @@ async function startServer() {
      * @security JWT
      */
     app.post("/:path*", authenticate, checkWriteAccess, async (req, res) => {
-      const path = req.params.path;
-      const key = path + (req.params[0] ? req.params[0] : "") + "/";
+      const path = req.params.path + (req.params[0] ? req.params[0] : "") + "/";
       let data = req.body;
 
       // If data is an object with a value property, extract the value
@@ -427,8 +423,8 @@ async function startServer() {
       }
 
       // Check if path includes a hash
-      if (key.includes("%23")) {
-        const segments = key.split(/%23.*?\//); // Split on the first occurrence of '%23/' or '%23anything/'
+      if (path.includes("%23")) {
+        const segments = path.split(/%23.*?\//); // Split on the first occurrence of '%23/' or '%23anything/'
         const basePath = segments[0];
         const hashAndBeyond = segments[1];
 
@@ -475,7 +471,7 @@ async function startServer() {
       } else {
         // Regular data saving without hash
         try {
-          const result = await userDb.put({ _id: key, data });
+          const result = await userDb.put({ _id: path, data });
           res.json(result);
         } catch (error) {
           console.error("Failed to save data:", error);
@@ -496,18 +492,17 @@ async function startServer() {
      * @throws {Error} If there is an error while deleting the data.
      */
     app.delete("/:path*", authenticate, async (req, res) => {
-      const path = decodeURIComponent(req.params.path);
-      const key = path + (req.params[0] ? "/" + req.params[0] : ""); // Combine path and splat parameter
+      const path = req.params.path + (req.params[0] ? req.params[0] : "") + "/";
 
       // Check if the path includes a hash segment, indicating immutable content
-      if (key.includes("/#/")) {
+      if (path.includes("%23")) {
         return res
           .status(403)
           .json({ err: "Deletion of immutable hashed data is not allowed." });
       }
 
       try {
-        await userDb.del(key);
+        await userDb.del(path);
         res.json({ message: "Data deleted successfully" });
       } catch (error) {
         console.error("Failed to delete data:", error);
