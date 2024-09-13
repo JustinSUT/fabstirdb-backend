@@ -4,7 +4,6 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { initUserDB } from "./initUserDB.js";
 import { initAclDB } from "./initAclDB.js";
-import { initColorDB } from "./initColorDB.js";
 import crypto from "crypto";
 import Gun from "gun";
 const SEA = Gun.SEA;
@@ -14,7 +13,7 @@ config();
 
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key";
 
-let userDb, aclStore, colorDB;
+let userDb, aclStore;
 
 /**
  * Starts the server asynchronously.
@@ -26,7 +25,6 @@ async function startServer() {
   try {
     aclStore = await initAclDB(); // Initializes the ACL store
     userDb = await initUserDB(); // Initializes the user database
-    colorDB = await initColorDB();
     const app = express();
     app.use(cors());
     app.use(express.json());
@@ -375,79 +373,7 @@ async function startServer() {
         res.status(500).json({ err: "Server error" });
       }
     });
-    /**
-     * Express route handler for fetching color based on a smartAccount.
-     * @async
-     * @param {Object} req - The Express request object.
-     * @param {string} smartAccount.smartAccount.required - The base smartAccount where the color should be saved
-     * @param {Object} res - The Express response object.
-     * @returns {void}
-     * @throws {Error} If there is an error while fetching the color.
-     */
-    //authenticate
-    // app.get("/color/:smartAccount", async (req, res) => {
-    //   const { smartAccount } = req.params;
-
-    //   // Validate smartAccount parameter
-    //   if (!smartAccount) {
-    //     return res.status(400).json({ err: "Smart Account is required" });
-    //   }
-
-    //   console.log("Fetching color for smartAccount:", smartAccount);
-
-    //   try {
-    //     // Fetch the document from the database
-    //     const document = await userDb.get(smartAccount);
-
-    //     // Check if document exists
-    //     if (!document) {
-    //       return res
-    //         .status(404)
-    //         .json({ err: "Color not found for the provided smart account" });
-    //     }
-    //     const items = await userDb.get(smartAccount);
-    //     res.json(items);
-    //   } catch (error) {
-    //     // Log the error for debugging
-    //     console.error("Color fetching error:", error);
-
-    //     // Return a generic server error response
-    //     res.status(500).json({ err: "Server error during color fetching" });
-    //   }
-    // });
-
-    /**
-     * Express route handler for storing color.
-     * @async
-     * @param {Object} req - The Express request object.
-     * @param {string} path.path.required - The base path where the color should be saved
-     * @param {object} request.body.required - The color to save
-     * @param {Object} res - The Express response object.
-     * @returns {void}
-     * @throws {Error} If there is an error while fetching the color.
-     */
-    //authenticate
-    app.post("/color", async (req, res) => {
-      const { smartAccount, ...colors } = req.body.value;
-
-      if (!smartAccount) {
-        return res.status(400).json({ err: "Smart Account is required" });
-      }
-      console.log("smartAccount1", smartAccount);
-
-      try {
-        const document = await colorDB.put({
-          _id: smartAccount,
-          ...colors,
-        });
-
-        res.json({ message: "Color stored successfully", document });
-      } catch (error) {
-        console.error("Color saving error:", error);
-        res.status(500).json({ err: "Server error during color saving" });
-      }
-    });
-
+    
     /**
      * Express route handler for fetching data based on a path.
      * @async
@@ -461,20 +387,8 @@ async function startServer() {
     app.get("/:path*", async (req, res) => {
       const path = req.params.path + (req.params[0] ? req.params[0] : "") + "/";
       try {
-        if (path?.split("/")[0] == "color") {
-          let smartAccount = path?.split("/")[1];
-          if (!smartAccount) {
-            return res.status(400).json({ err: "Smart Account is required" });
-          }
-
-          const document = await colorDB.get(smartAccount);
-          let response = [{ _id: document[0]?._id, data: document[0] }];
-          res.setHeader("Content-Type", "application/json");
-          res.json(response);
-        } else {
-          const items = await userDb.get(path);
-          res.json(items);
-        }
+        const items = await userDb.get(path);
+        res.json(items);
       } catch (error) {
         console.error("Failed to fetch data:", error);
         res.status(500).json({ err: "Server Error" });
